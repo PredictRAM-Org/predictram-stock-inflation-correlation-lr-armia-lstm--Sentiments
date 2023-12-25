@@ -21,8 +21,6 @@ stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
 
 # Load stock news data
 stock_news_data = pd.read_excel("stock_news.xlsx")
-stock_news_data['Date'] = pd.to_datetime(stock_news_data['Date'])
-stock_news_data.set_index('Date', inplace=True)
 
 # Function to calculate correlation and build models
 def analyze_stock(stock_data, cpi_data, expected_inflation, min_max_scaler):
@@ -127,11 +125,11 @@ def perform_sentiment_analysis(stock_news_data):
 
     sentiment_scores = []
     for index, row in stock_news_data.iterrows():
-        st.write(f"\nAnalyzing sentiment for {row['Stock']} on {index}...")
+        st.write(f"\nAnalyzing sentiment for {row['Stock']}...")
         try:
             sentiment_scores.append(analyze_sentiment(analyzer, row['News']))
         except Exception as e:
-            st.write(f"Error analyzing sentiment for {row['Stock']} on {index}: {e}")
+            st.write(f"Error analyzing sentiment for {row['Stock']}: {e}")
             sentiment_scores.append(None)
 
     return sentiment_scores
