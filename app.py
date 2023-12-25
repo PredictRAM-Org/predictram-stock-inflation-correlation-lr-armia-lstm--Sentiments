@@ -123,22 +123,7 @@ date_range_options = ['1 month', '6 months', '1 year', '3 years', '5 years', '10
 selected_date_range = st.selectbox("Select Data Range:", date_range_options)
 train_model_button = st.button("Train Model")
 
-# Create session_state if it doesn't exist
-if 'session_state' not in st.session_state:
-    st.session_state.session_state = None
-
 if train_model_button:
-    # Store values in session_state
-    st.session_state.session_state = {
-        'expected_inflation': expected_inflation,
-        'selected_date_range': selected_date_range
-    }
-
-# Retrieve values from session_state
-if st.session_state.session_state is not None:
-    expected_inflation = st.session_state.session_state['expected_inflation']
-    selected_date_range = st.session_state.session_state['selected_date_range']
-
     st.write(f"Training model with Expected Inflation: {expected_inflation} and Data Range: {selected_date_range}...")
 
     actual_correlations = []
@@ -207,13 +192,13 @@ if st.session_state.session_state is not None:
 
     # Allow user to input stocks separated by comma
     selected_stocks_input = st.text_input("Enter stocks (separated by comma):")
+    selected_stocks = [stock.strip() for stock in selected_stocks_input.split(',')]
     analyze_sentiment_button = st.button("Analyze Sentiment")
 
     if analyze_sentiment_button:
         sentiment_results = []
 
-        for stock in selected_stocks_input.split(','):
-            stock = stock.strip()
+        for stock in selected_stocks:
             if stock in result_df['Stock'].values:
                 # Get sentiment scores for the selected stocks
                 api_key = "YOUR_NEWS_API_KEY"  # Replace with your News API key
@@ -244,14 +229,16 @@ if st.session_state.session_state is not None:
             # Sort by change in correlation if the column exists
             sentiment_df = sentiment_df.sort_values(by='Change in Correlation with CPI Change', ascending=False)
 
-        # Display sentiment analysis results
-        st.write("\nSentiment Analysis Results:")
-        st.table(sentiment_df)
+            # Display sentiment analysis results
+            st.write("\nSentiment Analysis Results:")
+            st.table(sentiment_df)
 
-        # Calculate Total Score
-        if 'Positive Score' in sentiment_df.columns and 'Negative Score' in sentiment_df.columns:
-            total_score = (sentiment_df['Positive Score'] - sentiment_df['Negative Score']).sum() + 0.1
-            st.write("\nTotal Score:")
-            st.write(total_score)
+            # Calculate Total Score
+            if 'Positive Score' in sentiment_df.columns and 'Negative Score' in sentiment_df.columns:
+                total_score = (sentiment_df['Positive Score'] - sentiment_df['Negative Score']).sum() + 0.1
+                st.write("\nTotal Score:")
+                st.write(total_score)
+            else:
+                st.error("Columns 'Positive Score' or 'Negative Score' not found in sentiment_df.")
         else:
-            st.error("Columns 'Positive Score' or 'Negative Score' not found in sentiment_df.")
+            st.warning("Column 'Change in Correlation with CPI Change' not found in sentiment_df.")
