@@ -45,7 +45,7 @@ def perform_sentiment_analysis(stock_name):
 
     # Fetch news articles from News API
     # Replace 'YOUR_NEWS_API_KEY' with your actual News API key
-    news_api_key = "5843e8b1715a4c1fb6628befb47ca1e8"
+    news_api_key = "YOUR_NEWS_API_KEY"
     news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
     response = requests.get(news_api_url)
     news_data = response.json()
@@ -192,8 +192,8 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         future_price_lstm_list.append(future_price_lstm)
         stock_names.append(stock_name)
 
-    # Display overall summary in a table
-    summary_data = {
+    # Create a DataFrame for results
+    results_data = {
         'Stock': stock_names,
         'Correlation with CPI Change': correlations,
         'Predicted Price Change (Linear Regression)': future_prices_lr_list,
@@ -201,9 +201,12 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         'Latest Actual Price': latest_actual_prices,
         'Predicted Stock Price (LSTM)': future_price_lstm_list
     }
-    summary_df = pd.DataFrame(summary_data)
-    st.write("\nCorrelation and Price Prediction Summary:")
-    st.table(summary_df)
+    results_df = pd.DataFrame(results_data)
+
+    # Display results in descending order of correlation
+    st.write("\nResults Sorted by Correlation:")
+    sorted_results_df = results_df.sort_values(by='Correlation with CPI Change', ascending=False)
+    st.table(sorted_results_df)
 
     # Display sentiment scores in a table
     sentiment_data = {
