@@ -154,6 +154,8 @@ def analyze_sentiment(analyzer, text):
     compound_score = analyzer.polarity_scores(text)['compound']
     return compound_score
 
+# ... (previous code)
+
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
@@ -170,7 +172,7 @@ if train_model_button and news_api_key:
     future_prices_arima_list = []
     latest_actual_prices = []
     future_price_lstm_list = []
-    sentiment_scores_list = []
+    sentiment_scores_list = []  # Initialize sentiment_scores_list
     stock_names = []
 
     for _, stock_row in stock_news_data.iterrows():
@@ -193,6 +195,8 @@ if train_model_button and news_api_key:
         future_prices_arima_list.append(future_price_arima)
         latest_actual_prices.append(latest_actual_price)
         future_price_lstm_list.append(future_price_lstm)
+        sentiment_scores_list.append(sentiment_scores)  # Append sentiment_scores
+
         stock_names.append(stock_name)
 
     # Display overall summary in a table
