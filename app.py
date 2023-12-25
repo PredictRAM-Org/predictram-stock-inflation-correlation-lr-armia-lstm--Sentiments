@@ -73,7 +73,7 @@ def analyze_stock(stock_data, cpi_data, expected_inflation):
     future_prices_lr = model_lr.predict([[expected_inflation]])
 
     # Predict future prices based on ARIMA
-    future_prices_arima = model_arima.predict(1).iloc[0]  # 1 is the number of steps to forecast
+    future_prices_arima = model_arima.predict(1)[0]  # 1 is the number of steps to forecast
 
     # Display the latest actual price
     latest_actual_price = merged_data['Close'].iloc[-1]
@@ -126,10 +126,10 @@ date_ranges = {
 
 selected_date_range = st.radio("Select Date Range:", list(date_ranges.keys()))
 
-analyze_button = st.button("Analyze Stocks")
+train_model_button = st.button("Train Model")
 
-if analyze_button:
-    st.write(f"Analyzing stocks for Expected Inflation: {expected_inflation} and Date Range: {selected_date_range}...")
+if train_model_button:
+    st.write(f"Training model with Expected Inflation: {expected_inflation} and Date Range: {selected_date_range}...")
 
     actual_correlations = []
     adjusted_correlations = []
