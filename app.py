@@ -122,7 +122,7 @@ def perform_sentiment_analysis(stock_names):
     analyzer = SentimentIntensityAnalyzer()
 
     # Fetch news articles for each stock using News API
-    newsapi = NewsApiClient(api_key='YOUR_NEWS_API_KEY')  # Replace 'YOUR_NEWS_API_KEY' with your actual API key
+    newsapi = NewsApiClient(api_key='5843e8b1715a4c1fb6628befb47ca1e8')  # Replace 'YOUR_NEWS_API_KEY' with your actual API key
 
     sentiment_scores = []
     for stock_name in stock_names:
