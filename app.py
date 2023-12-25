@@ -112,31 +112,19 @@ def get_sentiment_scores(stock_name, api_key, num_reports=20):
 
         return positive_score, neutral_score, negative_score
 
-    except requests.RequestException as e:
-        st.error(f"Error fetching news data for {stock_name}: {str(e)}")
-        return 0, 0, 0  # Return default scores in case of an error
+    except Exception as e:
+        st.error(f"Error fetching news reports for {stock_name}: {e}")
+        return None, None, None
 
 # Streamlit UI
-st.title("Stock-CPI Correlation Analysis with Expected Inflation and Price Prediction")
-
+st.title("Stock-CPI Correlation Analysis with Expected Inflation and Sentiment Analysis")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
-api_key = st.text_input("Enter your News API Key:")
-
-date_ranges = {
-    '1 Month': 30,
-    '6 Months': 180,
-    '1 Year': 365,
-    '3 Years': 3 * 365,
-    '5 Years': 5 * 365,
-    '10 Years': 10 * 365
-}
-
-selected_date_range = st.radio("Select Date Range:", list(date_ranges.keys()))
-
+date_range_options = ['1 month', '6 months', '1 year', '3 years', '5 years', '10 years']
+selected_date_range = st.selectbox("Select Data Range:", date_range_options)
 train_model_button = st.button("Train Model")
 
 if train_model_button:
-    st.write(f"Training model with Expected Inflation: {expected_inflation} and Date Range: {selected_date_range}...")
+    st.write(f"Training model with Expected Inflation: {expected_inflation} and Data Range: {selected_date_range}...")
 
     actual_correlations = []
     adjusted_correlations = []
@@ -145,15 +133,31 @@ if train_model_button:
     latest_actual_prices = []
     stock_names = []
 
-    date_range_days = date_ranges[selected_date_range]
+    # Convert selected_date_range to number of days
+    if selected_date_range == '1 month':
+        date_range_days = 30
+    elif selected_date_range == '6 months':
+        date_range_days = 180
+    elif selected_date_range == '1 year':
+        date_range_days = 365
+    elif selected_date_range == '3 years':
+        date_range_days = 3 * 365
+    elif selected_date_range == '5 years':
+        date_range_days = 5 * 365
+    elif selected_date_range == '10 years':
+        date_range_days = 10 * 365
+    else:
+        st.error("Invalid date range selection.")
+        date_range_days = None
 
     for stock_file in stock_files:
-        st.write(f"\nAnalyzing for {stock_file}...")
+        st.write(f"\nTraining for {stock_file}...")
         selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
-        # Filter stock data based on selected date range
-        selected_stock_data = selected_stock_data[selected_stock_data['Date'] >= selected_stock_data['Date'].max() - pd.to_timedelta(date_range_days, unit='D')]
+        # Filter stock data based on the selected date range
+        if date_range_days is not None:
+            selected_stock_data = selected_stock_data[selected_stock_data['Date'].max() - pd.to_timedelta(date_range_days, unit='D') <= selected_stock_data['Date']]
 
         actual_corr, adjusted_corr, future_price_lr, future_price_arima, latest_actual_price = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
 
@@ -195,6 +199,7 @@ if train_model_button:
     for stock in selected_stocks:
         if stock in result_df['Stock'].values:
             # Get sentiment scores for the selected stocks
+            api_key = "YOUR_NEWS_API_KEY"  # Replace with your News API key
             positive_score, neutral_score, negative_score = get_sentiment_scores(stock, api_key)
 
             # Calculate change in correlation with CPI Change based on sentiment
@@ -217,7 +222,10 @@ if train_model_button:
 
     # Create DataFrame for sentiment analysis results
     sentiment_df = pd.DataFrame(sentiment_results)
-    sentiment_df = sentiment_df.sort_values(by='Change in Correlation with CPI Change', ascending=False)
+    
+    if 'Change in Correlation with CPI Change' in sentiment_df.columns:
+        # Sort by change in correlation if the column exists
+        sentiment_df = sentiment_df.sort_values(by='Change in Correlation with CPI Change', ascending=False)
 
     # Display sentiment analysis results
     st.write("\nSentiment Analysis Results:")
