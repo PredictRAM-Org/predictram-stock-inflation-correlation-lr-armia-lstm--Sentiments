@@ -232,7 +232,11 @@ if train_model_button:
     st.table(sentiment_df)
 
     # Calculate Total Score
+if 'Positive Score' in sentiment_df.columns and 'Negative Score' in sentiment_df.columns:
     total_score = (sentiment_df['Positive Score'] - sentiment_df['Negative Score']).sum() + 0.1
+else:
+    st.error("Columns 'Positive Score' or 'Negative Score' not found in sentiment_df.")
+    total_score = None
 
-    st.write("\nTotal Score:")
-    st.write(total_score)
+st.write("\nTotal Score:")
+st.write(total_score)
