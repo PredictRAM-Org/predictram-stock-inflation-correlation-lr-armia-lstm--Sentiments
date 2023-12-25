@@ -4,7 +4,6 @@ scikit-learn==0.24.2
 matplotlib==3.4.3
 openpyxl
 seaborn
-statsmodels
 pmdarima
 tensorflow
 request
