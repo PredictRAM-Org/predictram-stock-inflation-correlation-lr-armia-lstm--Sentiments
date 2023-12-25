@@ -72,7 +72,8 @@ def analyze_stock(stock_data, cpi_data, expected_inflation, min_max_scaler):
     st.write(f"Predicted Price Change for Future Inflation (Linear Regression): {future_prices_lr[0]}")
 
     # Predict future prices based on ARIMA
-    future_prices_arima = model_arima.predict(1).iloc[0]  # 1 is the number of steps to forecast
+    future_prices_arima = model_arima.predict(1).values[0]
+  # 1 is the number of steps to forecast
     st.write(f"Predicted Price Change for Future Inflation (ARIMA): {future_prices_arima}")
 
     # Predict future prices using LSTM
