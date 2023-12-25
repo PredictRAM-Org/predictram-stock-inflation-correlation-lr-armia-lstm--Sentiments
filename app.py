@@ -84,30 +84,37 @@ def analyze_stock(stock_data, cpi_data, expected_inflation):
 def get_sentiment_scores(stock_name, api_key, num_reports=20):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
-    # Replace this with actual logic to fetch news reports for the stock using News API
-    api_url = "https://newsapi.org/v2/everything"
-    params = {
-        'apiKey': api_key,
-        'q': stock_name,
-        'pageSize': num_reports,
-        'sortBy': 'publishedAt',
-        'language': 'en'
-    }
+    try:
+        # Replace this with actual logic to fetch news reports for the stock using News API
+        api_url = "https://newsapi.org/v2/everything"
+        params = {
+            'apiKey': api_key,
+            'q': stock_name,
+            'pageSize': num_reports,
+            'sortBy': 'publishedAt',
+            'language': 'en'
+        }
 
-    response = requests.get(api_url, params=params)
-    news_data = response.json()
+        response = requests.get(api_url, params=params)
+        response.raise_for_status()  # Raise an HTTPError for bad responses
 
-    # Extract headlines from the news data
-    headlines = [article['title'] for article in news_data['articles']]
+        news_data = response.json()
 
-    # Perform sentiment analysis using VADER
-    positive_score, neutral_score, negative_score = perform_sentiment_analysis(headlines)
+        # Extract headlines from the news data
+        headlines = [article['title'] for article in news_data['articles']]
 
-    st.write(f"Positive Score: {positive_score}")
-    st.write(f"Neutral Score: {neutral_score}")
-    st.write(f"Negative Score: {negative_score}")
+        # Perform sentiment analysis using VADER
+        positive_score, neutral_score, negative_score = perform_sentiment_analysis(headlines)
 
-    return positive_score, neutral_score, negative_score
+        st.write(f"Positive Score: {positive_score}")
+        st.write(f"Neutral Score: {neutral_score}")
+        st.write(f"Negative Score: {negative_score}")
+
+        return positive_score, neutral_score, negative_score
+
+    except requests.RequestException as e:
+        st.error(f"Error fetching news data for {stock_name}: {str(e)}")
+        return 0, 0, 0  # Return default scores in case of an error
 
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation and Price Prediction")
@@ -197,7 +204,7 @@ if train_model_button:
     for stock in selected_stocks:
         if stock in result_df['Stock'].values:
             # Get sentiment scores for the selected stocks
-            positive_score, neutral_score, negative_score = get_sentiment_scores(stock, api_key, num_reports=20)
+            positive_score, neutral_score, negative_score = get_sentiment_scores(stock, api_key)
 
             # Calculate change in correlation with CPI Change based on sentiment
             original_corr = result_df[result_df['Stock'] == stock]['Actual Correlation'].values[0]
