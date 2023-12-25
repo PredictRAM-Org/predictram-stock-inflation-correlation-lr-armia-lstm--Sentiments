@@ -121,8 +121,19 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
 def perform_sentiment_analysis(stock_name):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
+    # Check if the 'Stocks' column is present in stock_news_data
+    if 'Stocks' not in stock_news_data.columns:
+        st.write("Error: 'Stocks' column not found in stock_news_data. Please check your data.")
+        return []
+
     # Extract news articles for the given stock_name
-    stock_news = stock_news_data[stock_news_data['Stock'] == stock_name]
+    stock_news = stock_news_data[stock_news_data['Stocks'] == stock_name]
+
+    # Check if the 'News' column is present in stock_news_data
+    if 'News' not in stock_news.columns:
+        st.write("Error: 'News' column not found in stock_news_data. Please check your data.")
+        return []
+
     news_titles = stock_news['News'].tolist()
 
     # Analyze sentiment using VADER
