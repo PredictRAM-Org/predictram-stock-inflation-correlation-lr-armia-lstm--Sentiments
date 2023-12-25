@@ -7,3 +7,4 @@ requests==2.26.0
 openpyxl
 vaderSentiment
 newsapi-python
+tensorflow
