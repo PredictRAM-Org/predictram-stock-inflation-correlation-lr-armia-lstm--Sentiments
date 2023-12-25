@@ -39,36 +39,6 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
 
     return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(1, -1))[0]
 
-# Function to perform sentiment analysis using VADER and News API
-def perform_sentiment_analysis(stock_name):
-    st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
-
-    # Fetch news articles from News API
-    # Replace 'YOUR_NEWS_API_KEY' with your actual News API key
-    news_api_key = "YOUR_NEWS_API_KEY"
-    news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
-    response = requests.get(news_api_url)
-    news_data = response.json()
-
-    # Analyze sentiment using VADER
-    sentiment_scores = []
-    analyzer = SentimentIntensityAnalyzer()
-
-    for article in news_data.get('articles', [])[:20]:  # Analyze latest 20 news articles
-        st.write(f"\nAnalyzing sentiment for an article...")
-        try:
-            sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
-        except Exception as e:
-            st.write(f"Error analyzing sentiment for the article: {e}")
-            sentiment_scores.append(None)
-
-    return sentiment_scores
-
-# Function to analyze sentiment using VADER
-def analyze_sentiment(analyzer, text):
-    compound_score = analyzer.polarity_scores(text)['compound']
-    return compound_score
-
 # Load CPI data
 cpi_data = pd.read_excel("CPI.xlsx")
 cpi_data['Date'] = pd.to_datetime(cpi_data['Date'])
@@ -101,8 +71,8 @@ filtered_cpi_data = cpi_data.loc[start_date:end_date]
 # User input for expected CPI inflation
 expected_inflation = st.number_input("Enter Expected Upcoming CPI Inflation:", min_value=0.0, step=0.01)
 
-# Train models and perform sentiment analysis
-if st.button("Train Models and Perform Sentiment Analysis"):
+# Train models
+if st.button("Train Models"):
     st.write(f"Training models with data range: {data_range} and expected CPI inflation: {expected_inflation}...")
 
     correlations = []
@@ -110,7 +80,6 @@ if st.button("Train Models and Perform Sentiment Analysis"):
     future_prices_arima_list = []
     latest_actual_prices = []
     future_price_lstm_list = []
-    sentiment_scores_list = []
     stock_names = []
 
     for stock_file in stock_files:
@@ -181,10 +150,6 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         latest_actual_price = merged_data['Close'].iloc[-1]
         st.write(f"Latest Actual Price for {stock_name}: {latest_actual_price}")
 
-        # Perform sentiment analysis
-        sentiment_scores = perform_sentiment_analysis(stock_name)
-        sentiment_scores_list.append(sentiment_scores)
-
         correlations.append(correlation_close_cpi)
         future_prices_lr_list.append(future_prices_lr[0])
         future_prices_arima_list.append(future_prices_arima)
@@ -207,12 +172,3 @@ if st.button("Train Models and Perform Sentiment Analysis"):
     st.write("\nResults Sorted by Correlation:")
     sorted_results_df = results_df.sort_values(by='Correlation with CPI Change', ascending=False)
     st.table(sorted_results_df)
-
-    # Display sentiment scores in a table
-    sentiment_data = {
-        'Stock': stock_names,
-        'Sentiment Scores': sentiment_scores_list
-    }
-    sentiment_df = pd.DataFrame(sentiment_data)
-    st.write("\nSentiment Analysis Summary:")
-    st.table(sentiment_df)
