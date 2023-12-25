@@ -9,7 +9,6 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.preprocessing import MinMaxScaler
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from newsapi import NewsApiClient
 
 # Load CPI data
 cpi_data = pd.read_excel("CPI.xlsx")
@@ -19,6 +18,11 @@ cpi_data.set_index('Date', inplace=True)
 # Load stock data
 stock_folder = "stock_folder"
 stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
+
+# Load stock news data
+stock_news_data = pd.read_excel("stock_news.xlsx")
+stock_news_data['Date'] = pd.to_datetime(stock_news_data['Date'])
+stock_news_data.set_index('Date', inplace=True)
 
 # Function to calculate correlation and build models
 def analyze_stock(stock_data, cpi_data, expected_inflation, min_max_scaler):
@@ -117,28 +121,23 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
     return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
 
 # Function to perform sentiment analysis using VADER
-def perform_sentiment_analysis(stock_names):
+def perform_sentiment_analysis(stock_news_data):
     st.write("\nPerforming Sentiment Analysis...")
     analyzer = SentimentIntensityAnalyzer()
 
-    # Fetch news articles for each stock using News API
-    newsapi = NewsApiClient(api_key='5843e8b1715a4c1fb6628befb47ca1e8')  # Replace 'YOUR_NEWS_API_KEY' with your actual API key
-
     sentiment_scores = []
-    for stock_name in stock_names:
-        st.write(f"\nFetching news for {stock_name}...")
+    for index, row in stock_news_data.iterrows():
+        st.write(f"\nAnalyzing sentiment for {row['Stock']} on {index}...")
         try:
-            articles = newsapi.get_everything(q=stock_name, language='en', sort_by='relevancy')
-            headlines = [article['title'] for article in articles['articles']]
-            sentiment_scores.append(analyze_sentiment(analyzer, headlines))
+            sentiment_scores.append(analyze_sentiment(analyzer, row['News']))
         except Exception as e:
-            st.write(f"Error fetching news for {stock_name}: {e}")
+            st.write(f"Error analyzing sentiment for {row['Stock']} on {index}: {e}")
             sentiment_scores.append(None)
 
     return sentiment_scores
 
-def analyze_sentiment(analyzer, headlines):
-    compound_scores = [analyzer.polarity_scores(headline)['compound'] for headline in headlines]
+def analyze_sentiment(analyzer, news_text):
+    compound_scores = [analyzer.polarity_scores(news)['compound'] for news in news_text.split('\n') if news.strip()]
     average_score = np.mean(compound_scores)
     return average_score
 
@@ -146,25 +145,11 @@ def analyze_sentiment(analyzer, headlines):
 st.title("Stock-CPI Correlation Analysis with Expected Inflation and Price Prediction")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
 
-# Select tenure for training the model
-tenure_options = ['1 year', '3 years', '5 years', '10 years']
-selected_tenure = st.selectbox("Select Tenure for Training Model:", tenure_options)
-
-# Convert tenure to timedelta for filtering data
-tenure_mapping = {'1 year': pd.DateOffset(years=1),
-                  '3 years': pd.DateOffset(years=3),
-                  '5 years': pd.DateOffset(years=5),
-                  '10 years': pd.DateOffset(years=10)}
-
-selected_tenure_offset = tenure_mapping[selected_tenure]
-end_date = pd.to_datetime("2023-11-01")  # Last date available in the data
-start_date = end_date - selected_tenure_offset
-
 # Train Model Button
 train_model_button = st.button("Train Model")
 
 if train_model_button:
-    st.write(f"Training model with Expected Inflation: {expected_inflation} and Tenure: {selected_tenure}...")
+    st.write(f"Training model with Expected Inflation: {expected_inflation}...")
 
     correlations = []
     future_prices_lr_list = []
@@ -177,9 +162,6 @@ if train_model_button:
         st.write(f"\nTraining for {stock_file}...")
         selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
-
-        # Filter stock data based on selected tenure
-        selected_stock_data = selected_stock_data[(selected_stock_data['Date'] >= start_date) & (selected_stock_data['Date'] <= end_date)]
 
         min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
         correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation, min_max_scaler)
@@ -204,19 +186,14 @@ if train_model_button:
     st.write("\nCorrelation and Price Prediction Summary:")
     st.table(summary_df)
 
-    # Perform sentiment analysis for stocks without '.NS_data.xlsx'
-    filtered_stock_names = [stock_name for stock_name in stock_names if not stock_name.endswith('.NS_data.xlsx')]
-    if filtered_stock_names:
-        # Perform sentiment analysis
-        sentiment_scores = perform_sentiment_analysis(filtered_stock_names)
+    # Perform sentiment analysis for each stock in stock_news_data
+    sentiment_scores = perform_sentiment_analysis(stock_news_data)
 
-        # Display sentiment scores in a table
-        sentiment_data = {
-            'Stock': filtered_stock_names,
-            'Sentiment Score': sentiment_scores
-        }
-        sentiment_df = pd.DataFrame(sentiment_data)
-        st.write("\nSentiment Analysis Summary:")
-        st.table(sentiment_df)
-    else:
-        st.write("\nNo stocks available for sentiment analysis (without '.NS_data.xlsx').")
+    # Display sentiment scores in a table
+    sentiment_data = {
+        'Stock': stock_news_data['Stock'],
+        'Sentiment Score': sentiment_scores
+    }
+    sentiment_df = pd.DataFrame(sentiment_data)
+    st.write("\nSentiment Analysis Summary:")
+    st.table(sentiment_df)
