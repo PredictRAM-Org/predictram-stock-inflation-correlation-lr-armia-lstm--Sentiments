@@ -37,7 +37,7 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
         predicted_prices.append(predicted_price[0, 0])
         input_data = np.append(input_data[:, 1:, :], predicted_price.reshape(1, 1, 1), axis=1)
 
-    return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
+    return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(1, -1))[0]
 
 # Function to perform sentiment analysis using VADER and News API
 def perform_sentiment_analysis(stock_name):
@@ -173,7 +173,7 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         st.write(f"Predicted Price Change for Future Inflation (ARIMA): {future_prices_arima}")
 
         # Predict future prices using LSTM
-        last_observed_price = scaled_data[-1]
+        last_observed_price = scaled_data[-3:]  # Use the last 3 observations for prediction
         future_price_lstm = predict_future_lstm(last_observed_price, model_lstm, min_max_scaler)
         st.write(f"Predicted Stock Price for Future Inflation (LSTM): {future_price_lstm}")
 
@@ -186,7 +186,7 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         sentiment_scores_list.append(sentiment_scores)
 
         correlations.append(correlation_close_cpi)
-        future_prices_lr_list.append(future_price_lr[0])
+        future_prices_lr_list.append(future_prices_lr[0])
         future_prices_arima_list.append(future_prices_arima)
         latest_actual_prices.append(latest_actual_price)
         future_price_lstm_list.append(future_price_lstm)
