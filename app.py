@@ -122,7 +122,7 @@ def perform_sentiment_analysis(stock_name):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
     # Check if the 'Stocks' column is present in stock_news_data
-    if 'Stocks' not in stock_news_data.columns:
+    if 'Stocks' not in stock_news.columns:
         st.write("Error: 'Stocks' column not found in stock_news_data. Please check your data.")
         return []
 
