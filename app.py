@@ -18,7 +18,7 @@ cpi_data.set_index('Date', inplace=True)
 
 # Load stock data
 stock_folder = "stock_folder"
-stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
+stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx") and not f.endswith(".NS_data.xlsx")]
 
 # Function to calculate correlation and build models
 def analyze_stock(stock_data, cpi_data, expected_inflation, min_max_scaler):
@@ -205,11 +205,12 @@ if train_model_button:
     st.table(summary_df)
 
     # Perform sentiment analysis
-    sentiment_scores = perform_sentiment_analysis(stock_names)
+    filtered_stock_names = [stock_name for stock_name in stock_names if not stock_name.endswith('.NS_data')]
+    sentiment_scores = perform_sentiment_analysis(filtered_stock_names)
 
     # Display sentiment scores in a table
     sentiment_data = {
-        'Stock': stock_names,
+        'Stock': filtered_stock_names,
         'Sentiment Score': sentiment_scores
     }
     sentiment_df = pd.DataFrame(sentiment_data)
