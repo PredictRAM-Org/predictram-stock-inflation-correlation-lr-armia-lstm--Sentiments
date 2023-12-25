@@ -139,7 +139,7 @@ def perform_sentiment_analysis(stock_name, news_api_key):
     sentiment_scores = []
     analyzer = SentimentIntensityAnalyzer()
 
-    for article in news_data.get('articles', [])[:20]:  # Analyze the latest 20 articles
+    for article in news_data.get('articles', []):
         st.write(f"\nAnalyzing sentiment for an article...")
         try:
             sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
@@ -153,8 +153,6 @@ def perform_sentiment_analysis(stock_name, news_api_key):
 def analyze_sentiment(analyzer, text):
     compound_score = analyzer.polarity_scores(text)['compound']
     return compound_score
-
-# ... (previous code)
 
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
@@ -172,11 +170,19 @@ if train_model_button and news_api_key:
     future_prices_arima_list = []
     latest_actual_prices = []
     future_price_lstm_list = []
-    sentiment_scores_list = []  # Initialize sentiment_scores_list
+    sentiment_scores_list = []
     stock_names = []
 
+    # Print column names in stock_news_data for debugging
+    st.write("Column Names in stock_news_data:", stock_news_data.columns)
+
     for _, stock_row in stock_news_data.iterrows():
-        stock_name = stock_row['Stock']
+        try:
+            # Use the correct column name for accessing stock information
+            stock_name = stock_row['Stocks']
+        except KeyError as e:
+            st.write(f"Error accessing 'Stocks' information in stock_row. Check the column name in stock_news_data. Error: {e}")
+            continue
 
         # Fetch stock data
         stock_file = f"{stock_name}.xlsx"
@@ -195,8 +201,6 @@ if train_model_button and news_api_key:
         future_prices_arima_list.append(future_price_arima)
         latest_actual_prices.append(latest_actual_price)
         future_price_lstm_list.append(future_price_lstm)
-        sentiment_scores_list.append(sentiment_scores)  # Append sentiment_scores
-
         stock_names.append(stock_name)
 
     # Display overall summary in a table
