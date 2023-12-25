@@ -3,11 +3,12 @@ import pandas as pd
 import streamlit as st
 from sklearn.linear_model import LinearRegression
 from pmdarima import auto_arima
-import numpy as np
 from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.preprocessing import MinMaxScaler
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
+from newsapi import NewsApiClient
+from datetime import datetime, timedelta
 
 # Load CPI data
 cpi_data = pd.read_excel("CPI.xlsx")
@@ -20,6 +21,9 @@ stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
 
 # Load stock news data
 stock_news_data = pd.read_excel("stock_news.xlsx")
+
+# Initialize NewsAPI client (please replace 'YOUR_API_KEY' with your actual NewsAPI key)
+newsapi = NewsApiClient(api_key='5843e8b1715a4c1fb6628befb47ca1e8')
 
 # Function to calculate correlation and build models
 def analyze_stock(stock_data, cpi_data, expected_inflation):
@@ -122,7 +126,7 @@ def perform_sentiment_analysis(stock_name):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
     # Check if the 'Stocks' column is present in stock_news_data
-    if 'Stocks' not in stock_news.columns:
+    if 'Stocks' not in stock_news_data.columns:
         st.write("Error: 'Stocks' column not found in stock_news_data. Please check your data.")
         return []
 
@@ -154,6 +158,49 @@ def analyze_sentiment(analyzer, text):
     compound_score = analyzer.polarity_scores(text)['compound']
     return compound_score
 
+# Function to perform sentiment analysis using NewsAPI on stock_news_data
+def perform_sentiment_analysis_newsapi(stock_name):
+    st.write(f"\nPerforming Sentiment Analysis for {stock_name} using NewsAPI...")
+
+    # Check if the 'Stocks' column is present in stock_news_data
+    if 'Stocks' not in stock_news_data.columns:
+        st.write("Error: 'Stocks' column not found in stock_news_data. Please check your data.")
+        return []
+
+    # Extract news articles for the given stock_name
+    stock_news = stock_news_data[stock_news_data['Stocks'] == stock_name]
+
+    # Check if the 'News' column is present in stock_news_data
+    if 'News' not in stock_news.columns:
+        st.write("Error: 'News' column not found in stock_news_data. Please check your data.")
+        return []
+
+    news_titles = stock_news['News'].tolist()
+
+    # Analyze sentiment using NewsAPI
+    sentiment_scores = []
+    for title in news_titles:
+        st.write(f"\nAnalyzing sentiment for a news article using NewsAPI...")
+        try:
+            sentiment_scores.append(analyze_sentiment_newsapi(title))
+        except Exception as e:
+            st.write(f"Error analyzing sentiment for the article using NewsAPI: {e}")
+            sentiment_scores.append(None)
+
+    return sentiment_scores
+
+def analyze_sentiment_newsapi(title):
+    # Make a call to the NewsAPI here
+    # Replace 'YOUR_API_KEY' with your actual NewsAPI key
+    response = newsapi.get_everything(q=title, language='en', sort_by='relevancy', page_size=1)
+
+    if response['status'] == 'ok' and response['totalResults'] > 0:
+        articles = response['articles']
+        compound_score = analyze_sentiment(analyzer, articles[0]['title'])
+        return compound_score
+    else:
+        return None
+
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
@@ -170,6 +217,7 @@ if train_model_button:
     latest_actual_prices = []
     future_price_lstm_list = []
     sentiment_scores_list = []
+    sentiment_scores_newsapi_list = []
     stock_names = []
 
     for stock_file in stock_files:
@@ -180,9 +228,13 @@ if train_model_button:
         min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
         correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
 
-        # Perform sentiment analysis
+        # Perform sentiment analysis using VADER
         sentiment_scores = perform_sentiment_analysis(stock_name)
         sentiment_scores_list.append(sentiment_scores)
+
+        # Perform sentiment analysis using NewsAPI
+        sentiment_scores_newsapi = perform_sentiment_analysis_newsapi(stock_name)
+        sentiment_scores_newsapi_list.append(sentiment_scores_newsapi)
 
         correlations.append(correlation_close_cpi)
         future_prices_lr_list.append(future_price_lr)
@@ -204,11 +256,20 @@ if train_model_button:
     st.write("\nCorrelation and Price Prediction Summary:")
     st.table(summary_df)
 
-    # Display sentiment scores in a table
+    # Display sentiment scores using VADER in a table
     sentiment_data = {
         'Stock': stock_names,
-        'Sentiment Scores': sentiment_scores_list
+        'Sentiment Scores (VADER)': sentiment_scores_list
     }
     sentiment_df = pd.DataFrame(sentiment_data)
-    st.write("\nSentiment Analysis Summary:")
+    st.write("\nSentiment Analysis Summary (VADER):")
     st.table(sentiment_df)
+
+    # Display sentiment scores using NewsAPI in a table
+    sentiment_data_newsapi = {
+        'Stock': stock_names,
+        'Sentiment Scores (NewsAPI)': sentiment_scores_newsapi_list
+    }
+    sentiment_df_newsapi = pd.DataFrame(sentiment_data_newsapi)
+    st.write("\nSentiment Analysis Summary (NewsAPI):")
+    st.table(sentiment_df_newsapi)
