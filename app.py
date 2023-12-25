@@ -7,7 +7,7 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense
 from sklearn.preprocessing import MinMaxScaler
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-from datetime import datetime, timedelta
+from newsapi import NewsApiClient
 
 # Load CPI data
 cpi_data = pd.read_excel("CPI.xlsx")
@@ -21,8 +21,8 @@ stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
 # Load stock news data
 stock_news_data = pd.read_excel("stock_news.xlsx")
 
-# Initialize NewsAPI client (replace 'YOUR_API_KEY' with your actual NewsAPI key)
-newsapi = NewsApiClient(api_key='YOUR_API_KEY')
+# Initialize NewsAPI client (replace 'YOUR_NEWSAPI_KEY' with your actual NewsAPI key)
+newsapi = NewsApiClient(api_key='5843e8b1715a4c1fb6628befb47ca1e8')
 
 # Function to calculate correlation and build models
 def analyze_stock(stock_data, cpi_data, expected_inflation, selected_tenure_offset):
@@ -129,6 +129,27 @@ def predict_future_lstm(last_observed_price, model):
 
     return predicted_prices[-1]
 
+def perform_sentiment_analysis(stock_name):
+    stock_news = stock_news_data[stock_news_data['Stock'] == stock_name]
+    sentiment_scores = []
+
+    for index, row in stock_news.iterrows():
+        # Fetch news articles for the stock from NewsAPI
+        news_articles = newsapi.get_everything(q=row['Stock'], from_param=row['Date'], to=row['Date'])
+
+        if news_articles['totalResults'] > 0:
+            # Extract text from news articles
+            articles_text = ' '.join([article['description'] for article in news_articles['articles']])
+
+            # Perform sentiment analysis using VADER
+            analyzer = SentimentIntensityAnalyzer()
+            sentiment_score = analyzer.polarity_scores(articles_text)
+            sentiment_scores.append(sentiment_score['compound'])
+        else:
+            sentiment_scores.append(0.0)
+
+    return sentiment_scores
+
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
@@ -157,6 +178,7 @@ if train_model_button:
     latest_actual_prices = []
     future_price_lstm_list = []
     stock_names = []
+    sentiment_scores_list = []
 
     for stock_file in stock_files:
         st.write(f"\nTraining for {stock_file}...")
@@ -191,3 +213,9 @@ if train_model_button:
     summary_df = pd.DataFrame(summary_data)
     st.write("\nCorrelation and Price Prediction Summary:")
     st.table(summary_df)
+
+    # Display sentiment analysis results
+    st.write("\nSentiment Analysis Results:")
+    sentiment_df = pd.DataFrame(sentiment_scores_list, columns=[f"Day {i + 1}" for i in range(len(sentiment_scores_list[0]))])
+    sentiment_df.insert(0, 'Stock', stock_names)
+    st.table(sentiment_df)
