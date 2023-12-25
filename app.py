@@ -112,34 +112,13 @@ def get_sentiment_scores(stock_name, api_key, num_reports=20):
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation and Price Prediction")
 
-# Date range selector for CPI data
-cpi_end_date = pd.to_datetime("Nov 2023")  # Set the end date as the latest date in your data
-
-# Options to select a fixed date range
-date_range_options = {
-    "Last One Month": cpi_end_date - pd.DateOffset(months=1),
-    "Last 3 Months": cpi_end_date - pd.DateOffset(months=3),
-    "Last 6 Months": cpi_end_date - pd.DateOffset(months=6),
-    "Last 1 Year": cpi_end_date - pd.DateOffset(years=1),
-    "Last 2 Years": cpi_end_date - pd.DateOffset(years=2),
-    "Last 5 Years": cpi_end_date - pd.DateOffset(years=5),
-}
-
-selected_date_range = st.selectbox("Select Fixed Date Range for Training Data:", list(date_range_options.keys()))
-
-# Calculate start date based on the selected date range
-cpi_start_date = date_range_options[selected_date_range]
-
-# Date range selector for stock data
-stock_start_date = st.date_input("Select Start Date for Stock Data:", min_value=cpi_data.index.min(), max_value=cpi_end_date)
-stock_end_date = st.date_input("Select End Date for Stock Data:", min_value=cpi_data.index.min(), max_value=cpi_end_date)
-
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
-news_api_key = st.text_input("Enter your News API Key:", type="password")
-train_model_button = st.button("Train Model")
+api_key = st.text_input("Enter your News API Key:")
 
-if train_model_button:
-    st.write(f"Training model with Expected Inflation: {expected_inflation} and selected date ranges...")
+analyze_button = st.button("Analyze Stocks")
+
+if analyze_button:
+    st.write(f"Analyzing stocks for Expected Inflation: {expected_inflation}...")
 
     actual_correlations = []
     adjusted_correlations = []
@@ -149,15 +128,20 @@ if train_model_button:
     stock_names = []
 
     for stock_file in stock_files:
-        st.write(f"\nTraining for {stock_file}...")
+        st.write(f"\nAnalyzing for {stock_file}...")
         selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
-        # Filter data based on selected date ranges
-        selected_stock_data = selected_stock_data[(selected_stock_data['Date'] >= stock_start_date) & (selected_stock_data['Date'] <= stock_end_date)]
-        selected_cpi_data = cpi_data[(cpi_data.index >= cpi_start_date) & (cpi_data.index <= cpi_end_date)]
+        # Analyze stock without allowing user input for date range
+        actual_corr, adjusted_corr, future_price_lr, future_price_arima, latest_actual_price = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
 
-        actual_corr, adjusted_corr, future_price_lr, future_price_arima, latest_actual_price = analyze_stock(selected_stock_data, selected_cpi_data, expected_inflation)
+        # Get sentiment scores for the stock using News API
+        positive_score, neutral_score, negative_score = get_sentiment_scores(stock_file, api_key)
+
+        # Calculate change in correlation with CPI Change based on sentiment
+        original_corr = actual_corr
+        new_corr = original_corr + 0.1 * (positive_score - negative_score)
+        change_in_corr = new_corr - original_corr
 
         actual_correlations.append(actual_corr)
         adjusted_correlations.append(adjusted_corr)
@@ -196,9 +180,10 @@ if train_model_button:
 
     for stock in selected_stocks:
         if stock in result_df['Stock'].values:
-            positive_score, neutral_score, negative_score = get_sentiment_scores(stock, news_api_key, num_reports=20)
+            # Get sentiment scores for the selected stocks
+            positive_score, neutral_score, negative_score = get_sentiment_scores(stock, api_key, num_reports=20)
 
-            # Calculate change in correlation with CPI Change
+            # Calculate change in correlation with CPI Change based on sentiment
             original_corr = result_df[result_df['Stock'] == stock]['Actual Correlation'].values[0]
             new_corr = original_corr + 0.1 * (positive_score - negative_score)
             change_in_corr = new_corr - original_corr
