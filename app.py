@@ -22,8 +22,8 @@ stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
 # Load stock news data
 stock_news_data = pd.read_excel("stock_news.xlsx")
 
-# Function to calculate correlation and build models
-def analyze_stock(stock_data, cpi_data, expected_inflation):
+# Function to calculate correlation, build models, and perform sentiment analysis
+def analyze_stock(stock_data, cpi_data, expected_inflation, news_api_key):
     stock_data['Date'] = pd.to_datetime(stock_data['Date'])
     stock_data.set_index('Date', inplace=True)
 
@@ -63,6 +63,7 @@ def analyze_stock(stock_data, cpi_data, expected_inflation):
     model_arima = auto_arima(y_lr, seasonal=False, suppress_warnings=True)
 
     # Train LSTM model
+    min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
     scaled_data = min_max_scaler.fit_transform(y_lr.values.reshape(-1, 1))
 
     x_train, y_train = prepare_data_for_lstm(scaled_data)
@@ -90,8 +91,13 @@ def analyze_stock(stock_data, cpi_data, expected_inflation):
     latest_actual_price = merged_data['Close'].iloc[-1]
     st.write(f"Latest Actual Price for {stock_name}: {latest_actual_price}")
 
+    # Perform sentiment analysis
+    sentiment_scores = perform_sentiment_analysis(stock_name, news_api_key)
+    sentiment_scores_list.append(sentiment_scores)
+
     return correlation_close_cpi, future_prices_lr[0], future_prices_arima, latest_actual_price, future_price_lstm, stock_name
 
+# Function to prepare data for LSTM
 def prepare_data_for_lstm(data, look_back=1):
     x, y = [], []
     for i in range(len(data) - look_back):
@@ -99,6 +105,7 @@ def prepare_data_for_lstm(data, look_back=1):
         y.append(data[i + look_back, 0])
     return np.array(x), np.array(y)
 
+# Function to build LSTM model
 def build_lstm_model(input_shape):
     model = Sequential()
     model.add(LSTM(units=50, return_sequences=True, input_shape=(input_shape, 1)))
@@ -107,6 +114,7 @@ def build_lstm_model(input_shape):
     model.compile(optimizer='adam', loss='mean_squared_error')
     return model
 
+# Function to predict future prices using LSTM
 def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1):
     predicted_prices = []
     input_data = last_observed_price.reshape(1, -1, 1)
@@ -119,11 +127,10 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
     return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
 
 # Function to perform sentiment analysis using VADER and News API
-def perform_sentiment_analysis(stock_name):
+def perform_sentiment_analysis(stock_name, news_api_key):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
     # Fetch news articles from News API
-    news_api_key = "YOUR_NEWS_API_KEY"  # Replace with your News API key
     news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
     response = requests.get(news_api_url)
     news_data = response.json()
@@ -132,7 +139,7 @@ def perform_sentiment_analysis(stock_name):
     sentiment_scores = []
     analyzer = SentimentIntensityAnalyzer()
 
-    for article in news_data.get('articles', []):
+    for article in news_data.get('articles', [])[:20]:  # Analyze the latest 20 articles
         st.write(f"\nAnalyzing sentiment for an article...")
         try:
             sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
@@ -142,6 +149,7 @@ def perform_sentiment_analysis(stock_name):
 
     return sentiment_scores
 
+# Function to analyze sentiment using VADER
 def analyze_sentiment(analyzer, text):
     compound_score = analyzer.polarity_scores(text)['compound']
     return compound_score
@@ -149,11 +157,12 @@ def analyze_sentiment(analyzer, text):
 # Streamlit UI
 st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
+news_api_key = st.text_input("Enter your News API key:")
 
 # Train Model Button
 train_model_button = st.button("Train Model")
 
-if train_model_button:
+if train_model_button and news_api_key:
     st.write(f"Training model with Expected Inflation: {expected_inflation}...")
 
     correlations = []
@@ -170,11 +179,7 @@ if train_model_button:
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
         min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
-        correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
-
-        # Perform sentiment analysis
-        sentiment_scores = perform_sentiment_analysis(stock_name)
-        sentiment_scores_list.append(sentiment_scores)
+        correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation, news_api_key)
 
         correlations.append(correlation_close_cpi)
         future_prices_lr_list.append(future_price_lr)
