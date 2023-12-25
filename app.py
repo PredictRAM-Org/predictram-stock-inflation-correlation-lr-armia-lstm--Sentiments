@@ -193,50 +193,50 @@ if train_model_button:
     # Allow user to input stocks separated by comma
     selected_stocks_input = st.text_input("Enter stocks (separated by comma):")
     selected_stocks = [stock.strip() for stock in selected_stocks_input.split(',')]
+    analyze_sentiment_button = st.button("Analyze Sentiment")
 
-    sentiment_results = []
+    if analyze_sentiment_button:
+        sentiment_results = []
 
-    for stock in selected_stocks:
-        if stock in result_df['Stock'].values:
-            # Get sentiment scores for the selected stocks
-            api_key = "YOUR_NEWS_API_KEY"  # Replace with your News API key
-            positive_score, neutral_score, negative_score = get_sentiment_scores(stock, api_key)
+        for stock in selected_stocks:
+            if stock in result_df['Stock'].values:
+                # Get sentiment scores for the selected stocks
+                api_key = "YOUR_NEWS_API_KEY"  # Replace with your News API key
+                positive_score, neutral_score, negative_score = get_sentiment_scores(stock, api_key)
 
-            # Calculate change in correlation with CPI Change based on sentiment
-            original_corr = result_df[result_df['Stock'] == stock]['Actual Correlation'].values[0]
-            new_corr = original_corr + 0.1 * (positive_score - negative_score)
-            change_in_corr = new_corr - original_corr
+                # Calculate change in correlation with CPI Change based on sentiment
+                original_corr = result_df[result_df['Stock'] == stock]['Actual Correlation'].values[0]
+                new_corr = original_corr + 0.1 * (positive_score - negative_score)
+                change_in_corr = new_corr - original_corr
 
-            sentiment_results.append({
-                'Stock': stock,
-                'Actual Correlation': original_corr,
-                'Adjusted Correlation': new_corr,
-                'Predicted Price Change (Linear Regression)': future_prices_lr_list[stock_names.index(stock)],
-                'Predicted Price Change (ARIMA)': future_prices_arima_list[stock_names.index(stock)],
-                'Latest Actual Price': latest_actual_prices[stock_names.index(stock)],
-                'Positive Score': positive_score,
-                'Neutral Score': neutral_score,
-                'Negative Score': negative_score,
-                'Change in Correlation with CPI Change': change_in_corr
-            })
+                sentiment_results.append({
+                    'Stock': stock,
+                    'Actual Correlation': original_corr,
+                    'Adjusted Correlation': new_corr,
+                    'Predicted Price Change (Linear Regression)': future_prices_lr_list[stock_names.index(stock)],
+                    'Predicted Price Change (ARIMA)': future_prices_arima_list[stock_names.index(stock)],
+                    'Latest Actual Price': latest_actual_prices[stock_names.index(stock)],
+                    'Positive Score': positive_score,
+                    'Neutral Score': neutral_score,
+                    'Negative Score': negative_score,
+                    'Change in Correlation with CPI Change': change_in_corr
+                })
 
-    # Create DataFrame for sentiment analysis results
-    sentiment_df = pd.DataFrame(sentiment_results)
-    
-    if 'Change in Correlation with CPI Change' in sentiment_df.columns:
-        # Sort by change in correlation if the column exists
-        sentiment_df = sentiment_df.sort_values(by='Change in Correlation with CPI Change', ascending=False)
+        # Create DataFrame for sentiment analysis results
+        sentiment_df = pd.DataFrame(sentiment_results)
 
-    # Display sentiment analysis results
-    st.write("\nSentiment Analysis Results:")
-    st.table(sentiment_df)
+        if 'Change in Correlation with CPI Change' in sentiment_df.columns:
+            # Sort by change in correlation if the column exists
+            sentiment_df = sentiment_df.sort_values(by='Change in Correlation with CPI Change', ascending=False)
 
-    # Calculate Total Score
-if 'Positive Score' in sentiment_df.columns and 'Negative Score' in sentiment_df.columns:
-    total_score = (sentiment_df['Positive Score'] - sentiment_df['Negative Score']).sum() + 0.1
-else:
-    st.error("Columns 'Positive Score' or 'Negative Score' not found in sentiment_df.")
-    total_score = None
+        # Display sentiment analysis results
+        st.write("\nSentiment Analysis Results:")
+        st.table(sentiment_df)
 
-st.write("\nTotal Score:")
-st.write(total_score)
+        # Calculate Total Score
+        if 'Positive Score' in sentiment_df.columns and 'Negative Score' in sentiment_df.columns:
+            total_score = (sentiment_df['Positive Score'] - sentiment_df['Negative Score']).sum() + 0.1
+            st.write("\nTotal Score:")
+            st.write(total_score)
+        else:
+            st.error("Columns 'Positive Score' or 'Negative Score' not found in sentiment_df.")
