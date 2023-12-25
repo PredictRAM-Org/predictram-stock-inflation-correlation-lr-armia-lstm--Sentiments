@@ -42,9 +42,12 @@ else:
 # Filter CPI data
 filtered_cpi_data = cpi_data.loc[start_date:end_date]
 
+# User input for expected CPI inflation
+expected_inflation = st.number_input("Enter Expected Upcoming CPI Inflation:", min_value=0.0, step=0.01)
+
 # Train models and perform sentiment analysis
 if st.button("Train Models and Perform Sentiment Analysis"):
-    st.write(f"Training models with data range: {data_range}...")
+    st.write(f"Training models with data range: {data_range} and expected CPI inflation: {expected_inflation}...")
 
     correlations = []
     future_prices_lr_list = []
@@ -96,7 +99,7 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         model_lstm.fit(x_train, y_train, epochs=50, batch_size=32)
 
         # Predict future prices based on Linear Regression
-        future_prices_lr = model_lr.predict([[0]])  # Assuming expected inflation is 0 for simplicity
+        future_prices_lr = model_lr.predict([[expected_inflation]])
         st.write(f"Predicted Price Change for Future Inflation (Linear Regression): {future_prices_lr[0]}")
 
         # Predict future prices based on ARIMA
@@ -186,7 +189,7 @@ def perform_sentiment_analysis(stock_name):
 
     # Fetch news articles from News API
     # Replace 'YOUR_NEWS_API_KEY' with your actual News API key
-    news_api_key = "YOUR_NEWS_API_KEY"
+    news_api_key = "5843e8b1715a4c1fb6628befb47ca1e8"
     news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
     response = requests.get(news_api_url)
     news_data = response.json()
