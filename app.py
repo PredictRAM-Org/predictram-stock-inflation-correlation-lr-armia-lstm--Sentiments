@@ -153,18 +153,9 @@ if train_model_button:
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
         # Filter stock data based on selected date range
-        selected_stock_data = selected_stock_data[selected_stock_data['Date'] >= selected_stock_data['Date'].max() - pd.Timedelta(days=date_range_days)]
+        selected_stock_data = selected_stock_data[selected_stock_data['Date'] >= selected_stock_data['Date'].max() - pd.to_timedelta(date_range_days, unit='D')]
 
-        # Analyze stock
         actual_corr, adjusted_corr, future_price_lr, future_price_arima, latest_actual_price = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
-
-        # Get sentiment scores for the stock using News API
-        positive_score, neutral_score, negative_score = get_sentiment_scores(stock_file, api_key)
-
-        # Calculate change in correlation with CPI Change based on sentiment
-        original_corr = actual_corr
-        new_corr = original_corr + 0.1 * (positive_score - negative_score)
-        change_in_corr = new_corr - original_corr
 
         actual_correlations.append(actual_corr)
         adjusted_correlations.append(adjusted_corr)
@@ -184,11 +175,11 @@ if train_model_button:
     }
     result_df = pd.DataFrame(result_data)
 
-    # Sort stocks by correlation with CPI Change
-    result_df = result_df.sort_values(by='Actual Correlation', ascending=False)
+    # Sort stocks by adjusted correlation
+    result_df = result_df.sort_values(by='Adjusted Correlation', ascending=False)
 
     # Display the sorted results
-    st.write("\nStocks Sorted by Correlation with CPI Change:")
+    st.write("\nStocks Sorted by Adjusted Correlation:")
     st.table(result_df)
 
     # Sentiment Analysis
@@ -214,10 +205,14 @@ if train_model_button:
             sentiment_results.append({
                 'Stock': stock,
                 'Actual Correlation': original_corr,
-                'Change in Correlation with CPI Change': change_in_corr,
+                'Adjusted Correlation': new_corr,
+                'Predicted Price Change (Linear Regression)': future_prices_lr_list[stock_names.index(stock)],
+                'Predicted Price Change (ARIMA)': future_prices_arima_list[stock_names.index(stock)],
+                'Latest Actual Price': latest_actual_prices[stock_names.index(stock)],
                 'Positive Score': positive_score,
                 'Neutral Score': neutral_score,
-                'Negative Score': negative_score
+                'Negative Score': negative_score,
+                'Change in Correlation with CPI Change': change_in_corr
             })
 
     # Create DataFrame for sentiment analysis results
