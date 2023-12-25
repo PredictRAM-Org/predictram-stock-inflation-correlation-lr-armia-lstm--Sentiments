@@ -10,13 +10,69 @@ from sklearn.preprocessing import MinMaxScaler
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import requests
 
+# Function to prepare data for LSTM
+def prepare_data_for_lstm(data, look_back=1):
+    x, y = [], []
+    for i in range(len(data) - look_back):
+        x.append(data[i:(i + look_back), 0])
+        y.append(data[i + look_back, 0])
+    return np.array(x), np.array(y)
+
+# Function to build LSTM model
+def build_lstm_model(input_shape):
+    model = Sequential()
+    model.add(LSTM(units=50, return_sequences=True, input_shape=(input_shape, 1)))
+    model.add(LSTM(units=50))
+    model.add(Dense(units=1))
+    model.compile(optimizer='adam', loss='mean_squared_error')
+    return model
+
+# Function to predict future prices using LSTM
+def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1):
+    predicted_prices = []
+    input_data = last_observed_price.reshape(1, -1, 1)
+
+    for _ in range(num_steps):
+        predicted_price = model.predict(input_data)
+        predicted_prices.append(predicted_price[0, 0])
+        input_data = np.append(input_data[:, 1:, :], predicted_price.reshape(1, 1, 1), axis=1)
+
+    return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
+
+# Function to perform sentiment analysis using VADER and News API
+def perform_sentiment_analysis(stock_name):
+    st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
+
+    # Fetch news articles from News API
+    # Replace 'YOUR_NEWS_API_KEY' with your actual News API key
+    news_api_key = "5843e8b1715a4c1fb6628befb47ca1e8"
+    news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
+    response = requests.get(news_api_url)
+    news_data = response.json()
+
+    # Analyze sentiment using VADER
+    sentiment_scores = []
+    analyzer = SentimentIntensityAnalyzer()
+
+    for article in news_data.get('articles', [])[:20]:  # Analyze latest 20 news articles
+        st.write(f"\nAnalyzing sentiment for an article...")
+        try:
+            sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
+        except Exception as e:
+            st.write(f"Error analyzing sentiment for the article: {e}")
+            sentiment_scores.append(None)
+
+    return sentiment_scores
+
+# Function to analyze sentiment using VADER
+def analyze_sentiment(analyzer, text):
+    compound_score = analyzer.polarity_scores(text)['compound']
+    return compound_score
+
 # Load CPI data
 cpi_data = pd.read_excel("CPI.xlsx")
 cpi_data['Date'] = pd.to_datetime(cpi_data['Date'])
 cpi_data.set_index('Date', inplace=True)
-
-# Load stock news data
-stock_news_data = pd.read_excel("stock_news.xlsx")
 
 # Load stock data
 stock_folder = "stock_folder"
@@ -60,14 +116,19 @@ if st.button("Train Models and Perform Sentiment Analysis"):
     for stock_file in stock_files:
         stock_name = os.path.splitext(stock_file)[0]
 
-        # Fetch stock data and filter based on the selected range
-        stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
-        stock_data['Date'] = pd.to_datetime(stock_data['Date'])
-        stock_data.set_index('Date', inplace=True)
-        filtered_stock_data = stock_data.loc[start_date:end_date]
+        # Fetch stock data and filter based on selected date range
+        selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
+        selected_stock_data['Date'] = pd.to_datetime(selected_stock_data['Date'])
+        selected_stock_data.set_index('Date', inplace=True)
+        filtered_stock_data = selected_stock_data.loc[start_date:end_date]
 
         # Merge stock and CPI data on Date
         merged_data = pd.merge(filtered_stock_data, filtered_cpi_data, left_index=True, right_index=True, how='inner')
+
+        # Handle NaN values in CPI column
+        if merged_data['CPI'].isnull().any():
+            st.write(f"Warning: NaN values found in 'CPI' column for {stock_name}. Dropping NaN values.")
+            merged_data = merged_data.dropna(subset=['CPI'])
 
         # Calculate CPI change
         merged_data['CPI Change'] = merged_data['CPI'].pct_change()
@@ -79,7 +140,7 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         correlation_close_cpi = merged_data['Close'].corr(merged_data['CPI Change'])
         correlation_actual = merged_data['Close'].corr(merged_data['CPI'])
 
-        st.write(f"\nCorrelation between 'Close' and 'CPI Change' for {stock_name}: {correlation_close_cpi}")
+        st.write(f"Correlation between 'Close' and 'CPI Change' for {stock_name}: {correlation_close_cpi}")
         st.write(f"Actual Correlation between 'Close' and 'CPI' for {stock_name}: {correlation_actual}")
 
         # Train Linear Regression model
@@ -94,7 +155,8 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         # Train LSTM model
         min_max_scaler = MinMaxScaler()
         scaled_data = min_max_scaler.fit_transform(y_lr.values.reshape(-1, 1))
-        x_train, y_train = prepare_data_for_lstm(scaled_data)
+        x_train, y_train = prepare_data_for_lstm(scaled_data, look_back=3)
+        x_train = np.reshape(x_train, (x_train.shape[0], x_train.shape[1], 1))
         model_lstm = build_lstm_model(x_train.shape[1])
         model_lstm.fit(x_train, y_train, epochs=50, batch_size=32)
 
@@ -123,9 +185,8 @@ if st.button("Train Models and Perform Sentiment Analysis"):
         sentiment_scores = perform_sentiment_analysis(stock_name)
         sentiment_scores_list.append(sentiment_scores)
 
-        # Append results to lists
         correlations.append(correlation_close_cpi)
-        future_prices_lr_list.append(future_prices_lr[0])
+        future_prices_lr_list.append(future_price_lr[0])
         future_prices_arima_list.append(future_prices_arima)
         latest_actual_prices.append(latest_actual_price)
         future_price_lstm_list.append(future_price_lstm)
@@ -152,64 +213,3 @@ if st.button("Train Models and Perform Sentiment Analysis"):
     sentiment_df = pd.DataFrame(sentiment_data)
     st.write("\nSentiment Analysis Summary:")
     st.table(sentiment_df)
-
-
-# Function to prepare data for LSTM
-def prepare_data_for_lstm(data, look_back=1):
-    x, y = [], []
-    for i in range(len(data) - look_back):
-        x.append(data[i:(i + look_back), 0])
-        y.append(data[i + look_back, 0])
-    return np.array(x), np.array(y)
-
-# Function to prepare data for LSTM
-def prepare_data_for_lstm(data, look_back=1):
-    x, y = [], []
-    for i in range(len(data) - look_back):
-        x.append(data[i:(i + look_back), 0])
-        y.append(data[i + look_back, 0])
-    return np.array(x), np.array(y)
-
-# ...
-
-# Train LSTM model
-min_max_scaler = MinMaxScaler()
-scaled_data = min_max_scaler.fit_transform(y_lr.values.reshape(-1, 1))
-
-# Ensure scaled_data is a 2D array
-if len(scaled_data.shape) == 1:
-    scaled_data = scaled_data.reshape(-1, 1)
-
-x_train, y_train = prepare_data_for_lstm(scaled_data)
-model_lstm = build_lstm_model(x_train.shape[1])
-model_lstm.fit(x_train, y_train, epochs=50, batch_size=32)
-
-# Function to perform sentiment analysis using VADER and News API
-def perform_sentiment_analysis(stock_name):
-    st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
-
-    # Fetch news articles from News API
-    # Replace 'YOUR_NEWS_API_KEY' with your actual News API key
-    news_api_key = "5843e8b1715a4c1fb6628befb47ca1e8"
-    news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
-    response = requests.get(news_api_url)
-    news_data = response.json()
-
-    # Analyze sentiment using VADER
-    sentiment_scores = []
-    analyzer = SentimentIntensityAnalyzer()
-
-    for article in news_data.get('articles', [])[:20]:  # Analyze latest 20 news articles
-        st.write(f"\nAnalyzing sentiment for an article...")
-        try:
-            sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
-        except Exception as e:
-            st.write(f"Error analyzing sentiment for the article: {e}")
-            sentiment_scores.append(None)
-
-    return sentiment_scores
-
-# Function to analyze sentiment using VADER
-def analyze_sentiment(analyzer, text):
-    compound_score = analyzer.polarity_scores(text)['compound']
-    return compound_score
