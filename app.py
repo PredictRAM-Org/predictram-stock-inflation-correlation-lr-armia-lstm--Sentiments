@@ -5,7 +5,7 @@ from sklearn.linear_model import LinearRegression
 from pmdarima import auto_arima
 import numpy as np
 from tensorflow.keras.models import Sequential
-from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow.keras.layers import LSTM, Dense
 from sklearn.preprocessing import MinMaxScaler
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 import requests
@@ -15,87 +15,141 @@ cpi_data = pd.read_excel("CPI.xlsx")
 cpi_data['Date'] = pd.to_datetime(cpi_data['Date'])
 cpi_data.set_index('Date', inplace=True)
 
+# Load stock news data
+stock_news_data = pd.read_excel("stock_news.xlsx")
+
 # Load stock data
 stock_folder = "stock_folder"
 stock_files = [f for f in os.listdir(stock_folder) if f.endswith(".xlsx")]
 
-# Load stock news data
-stock_news_data = pd.read_excel("stock_news.xlsx")
+# Streamlit UI
+st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
 
-# Function to calculate correlation, build models, and perform sentiment analysis
-def analyze_stock(stock_data, cpi_data, expected_inflation, news_api_key):
-    stock_data['Date'] = pd.to_datetime(stock_data['Date'])
-    stock_data.set_index('Date', inplace=True)
+# Select data range for training models
+data_range = st.selectbox("Select Data Range for Model Training:", ["6 months", "1 year", "3 years", "5 years"])
 
-    # Merge stock and CPI data on Date
-    merged_data = pd.merge(stock_data, cpi_data, left_index=True, right_index=True, how='inner')
+# Filter data based on the selected range
+end_date = pd.to_datetime('today')
+if data_range == "6 months":
+    start_date = end_date - pd.DateOffset(months=6)
+elif data_range == "1 year":
+    start_date = end_date - pd.DateOffset(years=1)
+elif data_range == "3 years":
+    start_date = end_date - pd.DateOffset(years=3)
+else:
+    start_date = end_date - pd.DateOffset(years=5)
 
-    # Handle NaN values in CPI column
-    if merged_data['CPI'].isnull().any():
-        st.write(f"Warning: NaN values found in 'CPI' column for {stock_data.name}. Dropping NaN values.")
-        merged_data = merged_data.dropna(subset=['CPI'])
+# Filter CPI data
+filtered_cpi_data = cpi_data.loc[start_date:end_date]
 
-    # Calculate CPI change
-    merged_data['CPI Change'] = merged_data['CPI'].pct_change()
+# Train models and perform sentiment analysis
+if st.button("Train Models and Perform Sentiment Analysis"):
+    st.write(f"Training models with data range: {data_range}...")
 
-    # Drop NaN values after calculating percentage change
-    merged_data = merged_data.dropna()
+    correlations = []
+    future_prices_lr_list = []
+    future_prices_arima_list = []
+    latest_actual_prices = []
+    future_price_lstm_list = []
+    sentiment_scores_list = []
+    stock_names = []
 
-    # Show correlation between 'Close' column and 'CPI Change'
-    correlation_close_cpi = merged_data['Close'].corr(merged_data['CPI Change'])
-    correlation_actual = merged_data['Close'].corr(merged_data['CPI'])
+    for stock_file in stock_files:
+        stock_name = os.path.splitext(stock_file)[0]
 
-    stock_name = getattr(stock_data, 'name', None)
-    if stock_name is None:
-        # Use file name as a fallback if 'name' attribute is not available
-        stock_name = os.path.basename(stock_file)
+        # Fetch stock data and filter based on the selected range
+        stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
+        stock_data['Date'] = pd.to_datetime(stock_data['Date'])
+        stock_data.set_index('Date', inplace=True)
+        filtered_stock_data = stock_data.loc[start_date:end_date]
 
-    st.write(f"Correlation between 'Close' and 'CPI Change' for {stock_name}: {correlation_close_cpi}")
-    st.write(f"Actual Correlation between 'Close' and 'CPI' for {stock_name}: {correlation_actual}")
+        # Merge stock and CPI data on Date
+        merged_data = pd.merge(filtered_stock_data, filtered_cpi_data, left_index=True, right_index=True, how='inner')
 
-    # Train Linear Regression model
-    model_lr = LinearRegression()
-    X_lr = merged_data[['CPI']]
-    y_lr = merged_data['Close']
-    model_lr.fit(X_lr, y_lr)
+        # Calculate CPI change
+        merged_data['CPI Change'] = merged_data['CPI'].pct_change()
 
-    # Train ARIMA model using auto_arima
-    model_arima = auto_arima(y_lr, seasonal=False, suppress_warnings=True)
+        # Drop NaN values after calculating percentage change
+        merged_data = merged_data.dropna()
 
-    # Train LSTM model
-    min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
-    scaled_data = min_max_scaler.fit_transform(y_lr.values.reshape(-1, 1))
+        # Show correlation between 'Close' column and 'CPI Change'
+        correlation_close_cpi = merged_data['Close'].corr(merged_data['CPI Change'])
+        correlation_actual = merged_data['Close'].corr(merged_data['CPI'])
 
-    x_train, y_train = prepare_data_for_lstm(scaled_data)
-    model_lstm = build_lstm_model(x_train.shape[1])
-    model_lstm.fit(x_train, y_train, epochs=50, batch_size=32)
+        st.write(f"\nCorrelation between 'Close' and 'CPI Change' for {stock_name}: {correlation_close_cpi}")
+        st.write(f"Actual Correlation between 'Close' and 'CPI' for {stock_name}: {correlation_actual}")
 
-    # Predict future prices based on Linear Regression
-    future_prices_lr = model_lr.predict([[expected_inflation]])
-    st.write(f"Predicted Price Change for Future Inflation (Linear Regression): {future_prices_lr[0]}")
+        # Train Linear Regression model
+        model_lr = LinearRegression()
+        X_lr = merged_data[['CPI']]
+        y_lr = merged_data['Close']
+        model_lr.fit(X_lr, y_lr)
 
-    # Predict future prices based on ARIMA
-    arima_predictions = model_arima.predict(1)
-    if isinstance(arima_predictions, pd.Series):
-        future_prices_arima = arima_predictions.iloc[0]
-    else:
-        future_prices_arima = arima_predictions[0]
-    st.write(f"Predicted Price Change for Future Inflation (ARIMA): {future_prices_arima}")
+        # Train ARIMA model using auto_arima
+        model_arima = auto_arima(y_lr, seasonal=False, suppress_warnings=True)
 
-    # Predict future prices using LSTM
-    last_observed_price = scaled_data[-1]
-    future_price_lstm = predict_future_lstm(last_observed_price, model_lstm, min_max_scaler)
-    st.write(f"Predicted Stock Price for Future Inflation (LSTM): {future_price_lstm}")
+        # Train LSTM model
+        min_max_scaler = MinMaxScaler()
+        scaled_data = min_max_scaler.fit_transform(y_lr.values.reshape(-1, 1))
+        x_train, y_train = prepare_data_for_lstm(scaled_data)
+        model_lstm = build_lstm_model(x_train.shape[1])
+        model_lstm.fit(x_train, y_train, epochs=50, batch_size=32)
 
-    # Display the latest actual price
-    latest_actual_price = merged_data['Close'].iloc[-1]
-    st.write(f"Latest Actual Price for {stock_name}: {latest_actual_price}")
+        # Predict future prices based on Linear Regression
+        future_prices_lr = model_lr.predict([[0]])  # Assuming expected inflation is 0 for simplicity
+        st.write(f"Predicted Price Change for Future Inflation (Linear Regression): {future_prices_lr[0]}")
 
-    # Perform sentiment analysis
-    sentiment_scores = perform_sentiment_analysis(stock_name, news_api_key)
-    sentiment_scores_list.append(sentiment_scores)
+        # Predict future prices based on ARIMA
+        arima_predictions = model_arima.predict(1)
+        if isinstance(arima_predictions, pd.Series):
+            future_prices_arima = arima_predictions.iloc[0]
+        else:
+            future_prices_arima = arima_predictions[0]
+        st.write(f"Predicted Price Change for Future Inflation (ARIMA): {future_prices_arima}")
 
-    return correlation_close_cpi, future_prices_lr[0], future_prices_arima, latest_actual_price, future_price_lstm, stock_name
+        # Predict future prices using LSTM
+        last_observed_price = scaled_data[-1]
+        future_price_lstm = predict_future_lstm(last_observed_price, model_lstm, min_max_scaler)
+        st.write(f"Predicted Stock Price for Future Inflation (LSTM): {future_price_lstm}")
+
+        # Display the latest actual price
+        latest_actual_price = merged_data['Close'].iloc[-1]
+        st.write(f"Latest Actual Price for {stock_name}: {latest_actual_price}")
+
+        # Perform sentiment analysis
+        sentiment_scores = perform_sentiment_analysis(stock_name)
+        sentiment_scores_list.append(sentiment_scores)
+
+        # Append results to lists
+        correlations.append(correlation_close_cpi)
+        future_prices_lr_list.append(future_prices_lr[0])
+        future_prices_arima_list.append(future_prices_arima)
+        latest_actual_prices.append(latest_actual_price)
+        future_price_lstm_list.append(future_price_lstm)
+        stock_names.append(stock_name)
+
+    # Display overall summary in a table
+    summary_data = {
+        'Stock': stock_names,
+        'Correlation with CPI Change': correlations,
+        'Predicted Price Change (Linear Regression)': future_prices_lr_list,
+        'Predicted Price Change (ARIMA)': future_prices_arima_list,
+        'Latest Actual Price': latest_actual_prices,
+        'Predicted Stock Price (LSTM)': future_price_lstm_list
+    }
+    summary_df = pd.DataFrame(summary_data)
+    st.write("\nCorrelation and Price Prediction Summary:")
+    st.table(summary_df)
+
+    # Display sentiment scores in a table
+    sentiment_data = {
+        'Stock': stock_names,
+        'Sentiment Scores': sentiment_scores_list
+    }
+    sentiment_df = pd.DataFrame(sentiment_data)
+    st.write("\nSentiment Analysis Summary:")
+    st.table(sentiment_df)
+
 
 # Function to prepare data for LSTM
 def prepare_data_for_lstm(data, look_back=1):
@@ -127,10 +181,12 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
     return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
 
 # Function to perform sentiment analysis using VADER and News API
-def perform_sentiment_analysis(stock_name, news_api_key):
+def perform_sentiment_analysis(stock_name):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
     # Fetch news articles from News API
+    # Replace 'YOUR_NEWS_API_KEY' with your actual News API key
+    news_api_key = "YOUR_NEWS_API_KEY"
     news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
     response = requests.get(news_api_url)
     news_data = response.json()
@@ -139,7 +195,7 @@ def perform_sentiment_analysis(stock_name, news_api_key):
     sentiment_scores = []
     analyzer = SentimentIntensityAnalyzer()
 
-    for article in news_data.get('articles', []):
+    for article in news_data.get('articles', [])[:20]:  # Analyze latest 20 news articles
         st.write(f"\nAnalyzing sentiment for an article...")
         try:
             sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
@@ -153,74 +209,3 @@ def perform_sentiment_analysis(stock_name, news_api_key):
 def analyze_sentiment(analyzer, text):
     compound_score = analyzer.polarity_scores(text)['compound']
     return compound_score
-
-# Streamlit UI
-st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
-expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
-news_api_key = st.text_input("Enter your News API key:")
-
-# Train Model Button
-train_model_button = st.button("Train Model")
-
-if train_model_button and news_api_key:
-    st.write(f"Training model with Expected Inflation: {expected_inflation}...")
-
-    correlations = []
-    future_prices_lr_list = []
-    future_prices_arima_list = []
-    latest_actual_prices = []
-    future_price_lstm_list = []
-    sentiment_scores_list = []
-    stock_names = []
-
-    # Print column names in stock_news_data for debugging
-    st.write("Column Names in stock_news_data:", stock_news_data.columns)
-
-    for _, stock_row in stock_news_data.iterrows():
-        try:
-            # Use the correct column name for accessing stock information
-            stock_name = stock_row['Stocks']
-        except KeyError as e:
-            st.write(f"Error accessing 'Stocks' information in stock_row. Check the column name in stock_news_data. Error: {e}")
-            continue
-
-        # Fetch stock data
-        stock_file = f"{stock_name}.xlsx"
-        if stock_file not in stock_files:
-            st.warning(f"Stock data not found for {stock_name}. Skipping...")
-            continue
-
-        selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
-        selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
-
-        min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
-        correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation, news_api_key)
-
-        correlations.append(correlation_close_cpi)
-        future_prices_lr_list.append(future_price_lr)
-        future_prices_arima_list.append(future_price_arima)
-        latest_actual_prices.append(latest_actual_price)
-        future_price_lstm_list.append(future_price_lstm)
-        stock_names.append(stock_name)
-
-    # Display overall summary in a table
-    summary_data = {
-        'Stock': stock_names,
-        'Correlation with CPI Change': correlations,
-        'Predicted Price Change (Linear Regression)': future_prices_lr_list,
-        'Predicted Price Change (ARIMA)': future_prices_arima_list,
-        'Latest Actual Price': latest_actual_prices,
-        'Predicted Stock Price (LSTM)': future_price_lstm_list
-    }
-    summary_df = pd.DataFrame(summary_data)
-    st.write("\nCorrelation and Price Prediction Summary:")
-    st.table(summary_df)
-
-    # Display sentiment scores in a table
-    sentiment_data = {
-        'Stock': stock_names,
-        'Sentiment Scores': sentiment_scores_list
-    }
-    sentiment_df = pd.DataFrame(sentiment_data)
-    st.write("\nSentiment Analysis Summary:")
-    st.table(sentiment_df)
