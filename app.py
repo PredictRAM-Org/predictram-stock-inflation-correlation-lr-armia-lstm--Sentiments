@@ -26,9 +26,14 @@ stock_news_data = pd.read_excel("stock_news.xlsx")
 newsapi = NewsApiClient(api_key='5843e8b1715a4c1fb6628befb47ca1e8')
 
 # Function to calculate correlation and build models
-def analyze_stock(stock_data, cpi_data, expected_inflation):
+def analyze_stock(stock_data, cpi_data, expected_inflation, selected_tenure_offset):
     stock_data['Date'] = pd.to_datetime(stock_data['Date'])
     stock_data.set_index('Date', inplace=True)
+
+    # Filter stock data based on selected tenure
+    end_date = stock_data.index.max()
+    start_date = end_date - selected_tenure_offset
+    stock_data = stock_data[(stock_data.index >= start_date) & (stock_data.index <= end_date)]
 
     # Merge stock and CPI data on Date
     merged_data = pd.merge(stock_data, cpi_data, left_index=True, right_index=True, how='inner')
@@ -139,9 +144,9 @@ def perform_sentiment_analysis(stock_name):
         return []
 
     news_titles = stock_news['News'].tolist()
-
-    # Analyze sentiment using VADER
     sentiment_scores = []
+
+    # Initialize VADER SentimentIntensityAnalyzer
     analyzer = SentimentIntensityAnalyzer()
 
     for title in news_titles:
@@ -176,9 +181,8 @@ def perform_sentiment_analysis_newsapi(stock_name):
         return []
 
     news_titles = stock_news['News'].tolist()
-
-    # Analyze sentiment using NewsAPI
     sentiment_scores = []
+
     for title in news_titles:
         st.write(f"\nAnalyzing sentiment for a news article using NewsAPI...")
         try:
@@ -205,11 +209,23 @@ def analyze_sentiment_newsapi(title):
 st.title("Stock-CPI Correlation Analysis with Expected Inflation, Price Prediction, and Sentiment Analysis")
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
 
+# Select tenure for training the model
+tenure_options = ['6 months', '1 year', '3 years', '5 years']
+selected_tenure = st.selectbox("Select Tenure for Training Model:", tenure_options)
+
+# Convert tenure to timedelta for filtering data
+tenure_mapping = {'6 months': pd.DateOffset(months=6),
+                  '1 year': pd.DateOffset(years=1),
+                  '3 years': pd.DateOffset(years=3),
+                  '5 years': pd.DateOffset(years=5)}
+
+selected_tenure_offset = tenure_mapping[selected_tenure]
+
 # Train Model Button
 train_model_button = st.button("Train Model")
 
 if train_model_button:
-    st.write(f"Training model with Expected Inflation: {expected_inflation}...")
+    st.write(f"Training model with Expected Inflation: {expected_inflation} and Tenure: {selected_tenure}...")
 
     correlations = []
     future_prices_lr_list = []
@@ -217,7 +233,6 @@ if train_model_button:
     latest_actual_prices = []
     future_price_lstm_list = []
     sentiment_scores_list = []
-    sentiment_scores_newsapi_list = []
     stock_names = []
 
     for stock_file in stock_files:
@@ -225,16 +240,12 @@ if train_model_button:
         selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
-        min_max_scaler = MinMaxScaler()  # Move the MinMaxScaler initialization inside the loop
-        correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
+        # Perform analysis based on user-selected tenure
+        correlation_close_cpi, future_price_lr, future_price_arima, latest_actual_price, future_price_lstm, stock_name = analyze_stock(selected_stock_data, cpi_data, expected_inflation, selected_tenure_offset)
 
         # Perform sentiment analysis using VADER
         sentiment_scores = perform_sentiment_analysis(stock_name)
         sentiment_scores_list.append(sentiment_scores)
-
-        # Perform sentiment analysis using NewsAPI
-        sentiment_scores_newsapi = perform_sentiment_analysis_newsapi(stock_name)
-        sentiment_scores_newsapi_list.append(sentiment_scores_newsapi)
 
         correlations.append(correlation_close_cpi)
         future_prices_lr_list.append(future_price_lr)
@@ -264,12 +275,3 @@ if train_model_button:
     sentiment_df = pd.DataFrame(sentiment_data)
     st.write("\nSentiment Analysis Summary (VADER):")
     st.table(sentiment_df)
-
-    # Display sentiment scores using NewsAPI in a table
-    sentiment_data_newsapi = {
-        'Stock': stock_names,
-        'Sentiment Scores (NewsAPI)': sentiment_scores_newsapi_list
-    }
-    sentiment_df_newsapi = pd.DataFrame(sentiment_data_newsapi)
-    st.write("\nSentiment Analysis Summary (NewsAPI):")
-    st.table(sentiment_df_newsapi)
