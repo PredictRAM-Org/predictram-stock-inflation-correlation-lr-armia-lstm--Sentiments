@@ -8,7 +8,6 @@ from tensorflow.keras.models import Sequential
 from tensorflow.keras.layers import LSTM, Dense, Dropout
 from sklearn.preprocessing import MinMaxScaler
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
-import requests
 
 # Load CPI data
 cpi_data = pd.read_excel("CPI.xlsx")
@@ -118,24 +117,22 @@ def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1)
 
     return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
 
-# Function to perform sentiment analysis using VADER and News API
+# Function to perform sentiment analysis using VADER on stock_news_data
 def perform_sentiment_analysis(stock_name):
     st.write(f"\nPerforming Sentiment Analysis for {stock_name}...")
 
-    # Fetch news articles from News API
-    news_api_key = "5843e8b1715a4c1fb6628befb47ca1e8"  # Replace with your News API key
-    news_api_url = f"https://newsapi.org/v2/everything?q={stock_name}&apiKey={news_api_key}"
-    response = requests.get(news_api_url)
-    news_data = response.json()
+    # Extract news articles for the given stock_name
+    stock_news = stock_news_data[stock_news_data['Stock'] == stock_name]
+    news_titles = stock_news['News'].tolist()
 
     # Analyze sentiment using VADER
     sentiment_scores = []
     analyzer = SentimentIntensityAnalyzer()
 
-    for article in news_data.get('articles', []):
-        st.write(f"\nAnalyzing sentiment for an article...")
+    for title in news_titles:
+        st.write(f"\nAnalyzing sentiment for a news article...")
         try:
-            sentiment_scores.append(analyze_sentiment(analyzer, article['title']))
+            sentiment_scores.append(analyze_sentiment(analyzer, title))
         except Exception as e:
             st.write(f"Error analyzing sentiment for the article: {e}")
             sentiment_scores.append(None)
