@@ -162,26 +162,27 @@ def prepare_data_for_lstm(data, look_back=1):
         y.append(data[i + look_back, 0])
     return np.array(x), np.array(y)
 
-# Function to build LSTM model
-def build_lstm_model(input_shape):
-    model = Sequential()
-    model.add(LSTM(units=50, return_sequences=True, input_shape=(input_shape, 1)))
-    model.add(LSTM(units=50))
-    model.add(Dense(units=1))
-    model.compile(optimizer='adam', loss='mean_squared_error')
-    return model
+# Function to prepare data for LSTM
+def prepare_data_for_lstm(data, look_back=1):
+    x, y = [], []
+    for i in range(len(data) - look_back):
+        x.append(data[i:(i + look_back), 0])
+        y.append(data[i + look_back, 0])
+    return np.array(x), np.array(y)
 
-# Function to predict future prices using LSTM
-def predict_future_lstm(last_observed_price, model, min_max_scaler, num_steps=1):
-    predicted_prices = []
-    input_data = last_observed_price.reshape(1, -1, 1)
+# ...
 
-    for _ in range(num_steps):
-        predicted_price = model.predict(input_data)
-        predicted_prices.append(predicted_price[0, 0])
-        input_data = np.append(input_data[:, 1:, :], predicted_price.reshape(1, 1, 1), axis=1)
+# Train LSTM model
+min_max_scaler = MinMaxScaler()
+scaled_data = min_max_scaler.fit_transform(y_lr.values.reshape(-1, 1))
 
-    return min_max_scaler.inverse_transform(np.array(predicted_prices).reshape(-1, 1))[-1, 0]
+# Ensure scaled_data is a 2D array
+if len(scaled_data.shape) == 1:
+    scaled_data = scaled_data.reshape(-1, 1)
+
+x_train, y_train = prepare_data_for_lstm(scaled_data)
+model_lstm = build_lstm_model(x_train.shape[1])
+model_lstm.fit(x_train, y_train, epochs=50, batch_size=32)
 
 # Function to perform sentiment analysis using VADER and News API
 def perform_sentiment_analysis(stock_name):
