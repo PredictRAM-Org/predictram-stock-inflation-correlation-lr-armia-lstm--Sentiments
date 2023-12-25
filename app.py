@@ -115,10 +115,21 @@ st.title("Stock-CPI Correlation Analysis with Expected Inflation and Price Predi
 expected_inflation = st.number_input("Enter Expected Upcoming Inflation:", min_value=0.0, step=0.01)
 api_key = st.text_input("Enter your News API Key:")
 
+date_ranges = {
+    '1 Month': 30,
+    '6 Months': 180,
+    '1 Year': 365,
+    '3 Years': 3 * 365,
+    '5 Years': 5 * 365,
+    '10 Years': 10 * 365
+}
+
+selected_date_range = st.radio("Select Date Range:", list(date_ranges.keys()))
+
 analyze_button = st.button("Analyze Stocks")
 
 if analyze_button:
-    st.write(f"Analyzing stocks for Expected Inflation: {expected_inflation}...")
+    st.write(f"Analyzing stocks for Expected Inflation: {expected_inflation} and Date Range: {selected_date_range}...")
 
     actual_correlations = []
     adjusted_correlations = []
@@ -127,12 +138,17 @@ if analyze_button:
     latest_actual_prices = []
     stock_names = []
 
+    date_range_days = date_ranges[selected_date_range]
+
     for stock_file in stock_files:
         st.write(f"\nAnalyzing for {stock_file}...")
         selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
-        # Analyze stock without allowing user input for date range
+        # Filter stock data based on selected date range
+        selected_stock_data = selected_stock_data[selected_stock_data['Date'] >= selected_stock_data['Date'].max() - pd.Timedelta(days=date_range_days)]
+
+        # Analyze stock
         actual_corr, adjusted_corr, future_price_lr, future_price_arima, latest_actual_price = analyze_stock(selected_stock_data, cpi_data, expected_inflation)
 
         # Get sentiment scores for the stock using News API
