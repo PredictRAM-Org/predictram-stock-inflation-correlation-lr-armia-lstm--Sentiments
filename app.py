@@ -173,8 +173,15 @@ if train_model_button and news_api_key:
     sentiment_scores_list = []
     stock_names = []
 
-    for stock_file in stock_files:
-        st.write(f"\nTraining for {stock_file}...")
+    for _, stock_row in stock_news_data.iterrows():
+        stock_name = stock_row['Stock']
+
+        # Fetch stock data
+        stock_file = f"{stock_name}.xlsx"
+        if stock_file not in stock_files:
+            st.warning(f"Stock data not found for {stock_name}. Skipping...")
+            continue
+
         selected_stock_data = pd.read_excel(os.path.join(stock_folder, stock_file))
         selected_stock_data.name = stock_file  # Assign a name to the stock_data for reference
 
